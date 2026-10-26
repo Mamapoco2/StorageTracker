@@ -34,8 +34,8 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
 .form h2, .wide { grid-column: 1 / -1; }
 label { display: grid; gap: 4px; font-size: 13px; font-weight: 500; }
-input { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
-input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input, select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 button { font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 5px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
@@ -52,3 +52,10 @@ td:nth-child(6) { white-space: normal; min-width: 140px; }
 .pill.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
 .pill.crit { background: color-mix(in srgb, var(--crit) 18%, transparent); color: var(--crit); }
 .pager { display: flex; justify-content: center; align-items: center; gap: 14px; margin-top: 14px; }
+
+.report-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; }
+.seg button:first-child { border-radius: 5px 0 0 5px; } .seg button:last-child { border-radius: 0 5px 5px 0; margin-left: -1px; }
+.seg button.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.report td:nth-child(6) { white-space: nowrap; min-width: 0; }

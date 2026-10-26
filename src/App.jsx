@@ -8,6 +8,17 @@ const emptyForm = () => ({
   server_name: '', mount_point: '/', total_gb: '', used_gb: '', note: '', logged_by: '', logged_at: toLocalInput(new Date()),
 })
 
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const parseDay = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d) }
+const fmtDay = (s) => parseDay(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+const fmtChange = (n) => (n === null ? '–' : `${n > 0 ? '+' : ''}${fmt(n)} GB`)
+const shiftPeriod = (s, period, dir) => {
+  const d = parseDay(s)
+  if (period === 'weekly') d.setDate(d.getDate() + 7 * dir)
+  else { d.setDate(1); d.setMonth(d.getMonth() + dir) }
+  return ymd(d)
+}
+
 function ServerCard({ log, active, onSelect }) {
   return (
     <button className={`card ${level(log.used_percent)} ${active ? 'active' : ''}`} onClick={onSelect}>
@@ -52,6 +63,93 @@ function Trend({ server }) {
         <text x={P} y={H - 8} className="lbl">{new Date(rows[0].logged_at).toLocaleDateString()}</text>
         <text x={W - P} y={H - 8} textAnchor="end" className="lbl">{new Date(rows.at(-1).logged_at).toLocaleDateString()}</text>
       </svg>
+    </div>
+  )
+}
+
+function ReportPanel({ servers }) {
+  const [period, setPeriod] = useState('weekly')
+  const [date, setDate] = useState(() => ymd(new Date()))
+  const [server, setServer] = useState('')
+  const [report, setReport] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    let current = true
+    setLoading(true); setErr('')
+    api.report({ period, date, server })
+      .then((r) => current && setReport(r))
+      .catch((x) => { if (current) { setReport(null); setErr(x.message) } })
+      .finally(() => current && setLoading(false))
+    return () => { current = false }
+  }, [period, date, server])
+
+  const download = async () => {
+    setExporting(true); setErr('')
+    try {
+      const { blob, name } = await api.exportReport({ period, date, server })
+      const url = URL.createObjectURL(blob)
+      const link = Object.assign(document.createElement('a'), { href: url, download: name })
+      document.body.appendChild(link); link.click(); link.remove()
+      URL.revokeObjectURL(url)
+    } catch (x) { setErr(x.message) } finally { setExporting(false) }
+  }
+
+  const rows = report?.rows ?? []
+
+  return (
+    <div className="panel">
+      <div className="row-between">
+        <h2>Reports</h2>
+        <button className="primary" disabled={exporting || loading || rows.length === 0} onClick={download}>
+          {exporting ? 'Preparing…' : 'Download Excel'}
+        </button>
+      </div>
+
+      <div className="report-controls">
+        <div className="seg" role="group" aria-label="Report period">
+          {['weekly', 'monthly'].map((p) => (
+            <button key={p} className={period === p ? 'active' : ''} aria-pressed={period === p} onClick={() => setPeriod(p)}>
+              {p === 'weekly' ? 'Weekly' : 'Monthly'}
+            </button>
+          ))}
+        </div>
+        <button aria-label="Previous period" onClick={() => setDate(shiftPeriod(date, period, -1))}>‹</button>
+        {period === 'weekly'
+          ? <input type="date" aria-label="Any day in the week" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
+          : <input type="month" aria-label="Month" value={date.slice(0, 7)} onChange={(e) => e.target.value && setDate(`${e.target.value}-01`)} />}
+        <button aria-label="Next period" onClick={() => setDate(shiftPeriod(date, period, 1))}>›</button>
+        <select aria-label="Server" value={server} onChange={(e) => setServer(e.target.value)}>
+          <option value="">All servers</option>
+          {servers.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {report && <p className="muted">{fmtDay(report.from)} – {fmtDay(report.to)} · {report.entry_count} {report.entry_count === 1 ? 'entry' : 'entries'}</p>}
+      {err && <p className="error">{err}</p>}
+
+      <div className="scroll">
+        <table className="report">
+          <thead><tr><th>Server</th><th>Entries</th><th>Free now</th><th>Used now</th><th>Change</th><th>Avg used</th><th>Peak used</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={`${r.server_name}::${r.mount_point}`}>
+                <td>{r.server_name} <span className="mount">{r.mount_point}</span></td>
+                <td>{r.entries}</td>
+                <td>{fmt(r.last_free_gb)} GB</td>
+                <td><span className={`pill ${r.level}`}>{r.last_used_percent}%</span></td>
+                <td>{fmtChange(r.change_used_gb)}</td>
+                <td>{r.avg_used_percent}%</td>
+                <td>{r.peak_used_percent}%</td>
+              </tr>
+            ))}
+            {!loading && !err && rows.length === 0 && <tr><td colSpan="7" className="muted">No entries were logged in this period.</td></tr>}
+            {loading && <tr><td colSpan="7" className="muted">Loading…</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -132,6 +230,8 @@ export default function App() {
       </section>
 
       <Trend server={filter || servers[0]} />
+
+      <ReportPanel servers={servers} />
 
       {editing
         ? <EntryForm key={editing.id} initial={editing} servers={servers} onCancel={() => setEditing(null)} onSaved={() => { setEditing(null); load() }} />
